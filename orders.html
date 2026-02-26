@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orders - Admin</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+      rel="stylesheet">
+    <style>
+.badge-paid {background:#198754;}
+.badge-pending {background:#ffc107;color:#000;}
+.nav-tabs .nav-link.active{
+  font-weight:600;
+}
+</style>
+  </head>
+  <body>
+
+    <div class="container-fluid p-4">
+      <h3 class="mb-4">Orders</h3>
+
+      <!-- Tabs -->
+      <ul class="nav nav-tabs mb-3" id="orderTabs">
+        <li class="nav-item">
+          <button class="nav-link active"
+            onclick="filterOrders('Processing')">Processing</button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link"
+            onclick="filterOrders('Completed')">Completed</button>
+        </li>
+      </ul>
+
+      <div class="card shadow-sm">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Order ID</th>
+                <th>Customer</th>
+                <th>Room</th>
+                <th>Total</th>
+                <th>Payment</th>
+                <th>Date</th>
+                <th>View</th>
+              </tr>
+            </thead>
+            <tbody id="ordersTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ORDER MODAL -->
+    <div class="modal fade" id="orderModal" tabindex="-1">
+      <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Order Details</h5>
+            <button type="button" class="btn-close"
+              data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="modalContent"></div>
+          <div class="modal-footer">
+            <select id="modalStatus" class="form-select w-auto">
+              <option>Processing</option>
+              <option>Completed</option>
+              <option>Cancelled</option>
+            </select>
+            <button class="btn btn-primary" onclick="saveStatus()">Update
+              Status</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+const API_URL = "https://script.google.com/macros/s/AKfycbw5NuOqvFtJHV_IbzglzGaW1t9DmeDZqTXH2AR1vsIBNOsPZtkPKHcFJ7LT3haKWRvnow/exec";
+
+let allOrders = [];
+let selectedOrder = null;
+let currentFilter = "Processing";
+
+/* ===============================
+FETCH ORDERS
+=============================== */
+function fetchOrders(){
+  fetch(API_URL + "?type=orders")
+    .then(res => res.json())
+    .then(data => {
+      if(!Array.isArray(data)) return;
+      allOrders = [...data].reverse();
+      renderOrders();
+    })
+    .catch(err => console.error(err));
+}
+
+/* ===============================
+FILTER ORDERS
+=============================== */
+function filterOrders(status){
+  currentFilter = status;
+
+  document.querySelectorAll("#orderTabs .nav-link")
+    .forEach(btn => btn.classList.remove("active"));
+
+  event.target.classList.add("active");
+
+  renderOrders();
+}
+
+/* ===============================
+RENDER TABLE
+=============================== */
+function renderOrders(){
+  const table = document.getElementById("ordersTable");
+  table.innerHTML = "";
+
+  const filtered = allOrders.filter(o => o.order_status === currentFilter);
+
+  if(filtered.length === 0){
+    table.innerHTML =
+      "<tr><td colspan='7' class='text-center'>No orders found</td></tr>";
+    return;
+  }
+
+  filtered.forEach(order => {
+    table.innerHTML += `
+      <tr>
+        <td>${order.order_id}</td>
+        <td>${order.customer_name}</td>
+        <td>${order.room_number}</td>
+        <td>₱${order.total}</td>
+        <td>
+          <span class="badge ${order.payment_status==="Paid"?"badge-paid":"badge-pending"}">
+            ${order.payment_status}
+          </span>
+        </td>
+        <td>${new Date(order.date).toLocaleString()}</td>
+        <td>
+          <button class="btn btn-sm btn-dark"
+            onclick='openModal(${JSON.stringify(order)})'>
+            View Order
+          </button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+/* ===============================
+OPEN MODAL
+=============================== */
+function openModal(order){
+  selectedOrder = order;
+  document.getElementById("modalStatus").value = order.order_status;
+
+  const items = JSON.parse(order.items); // parse items JSON
+  let itemsHTML = "";
+  items.forEach(item => {
+    let finalPrice = item.discount
+      ? item.price - (item.price * parseFloat(item.discount)/100)
+      : item.price;
+
+    itemsHTML += `
+      <div class="d-flex align-items-center mb-2 border-bottom pb-2">
+        <img src="${item.image_url}" width="60" height="60" class="me-2 border">
+        <div class="flex-grow-1">
+          <strong>${item.product_name}</strong><br>
+          ${item.category || ""} - ${item.id}<br>
+          ${item.discount ? `<small>Discount (${item.discount}%)</small><br>` : ""}
+          <span>₱${finalPrice.toFixed(2)} × ${item.qty}</span>
+        </div>
+        <div class="text-end fw-bold">₱${(finalPrice*item.qty).toFixed(2)}</div>
+      </div>
+    `;
+  });
+
+  // Payment info
+  let paidAmount = order.payment_status === "Paid" || order.payment_method !== "COD"
+      ? order.total
+      : 0;
+  let balance = order.total - paidAmount;
+
+  let paymentHTML = `
+    <div class="border p-3 rounded mt-3">
+      <div class="mb-2"><strong>${order.payment_status === "Paid" ? "Paid" : "Payment Pending"}</strong></div>
+      <div class="d-flex justify-content-between"><span>Subtotal</span><span>₱${order.total}</span></div>
+      <div class="d-flex justify-content-between"><span>Discount</span><span>${items.some(i=>i.discount)?items.map(i=>i.discount).join(", "):"-"}</span></div>
+      <div class="d-flex justify-content-between"><span>Shipping</span><span>${order.shipping || "Standard"} - ₱${order.shipping_cost || 0}</span></div>
+      <div class="d-flex justify-content-between"><span>Taxes</span><span>₱${order.taxes || 0}</span></div>
+      <hr>
+      <div class="d-flex justify-content-between fw-bold"><span>Total</span><span>₱${order.total}</span></div>
+      <div class="d-flex justify-content-between"><span>Paid</span><span>₱${paidAmount.toFixed(2)}</span></div>
+      ${order.payment_method === "COD" && order.payment_status !== "Paid"
+        ? `<div class="d-flex justify-content-between fw-bold text-danger"><span>Balance</span><span>₱${balance.toFixed(2)}</span></div>
+           <div class="mt-2">
+             <div class="dropdown mt-2">
+  <button class="btn btn-sm btn-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+    Payment Action
+  </button>
+  <ul class="dropdown-menu">
+    <li><a class="dropdown-item" href="#" onclick="markAsPaid('${order.order_id}')">Mark as Paid</a></li>
+    <li><a class="dropdown-item" href="#" onclick="collectOnline('${order.order_id}')">Collect Online</a></li>
+  </ul>
+</div>
+             <button class="btn btn-sm btn-secondary" onclick="sendInvoice('${order.order_id}')">Send Invoice</button>
+           </div>`
+        : ""
+      }
+    </div>
+  `;
+
+  document.getElementById("modalContent").innerHTML = `
+    <div class="mb-3"><strong>Customer:</strong> ${order.customer_name} | Room: ${order.room_number} | ${order.mobile}</div>
+    ${itemsHTML}
+    ${paymentHTML}
+  `;
+
+  new bootstrap.Modal(document.getElementById("orderModal")).show();
+}
+
+/* ===============================
+COLLECT PAYMENT FOR COD
+=============================== */
+function collectPayment(orderId){
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      action:"updateOrderStatus",
+      orderId: orderId,
+      newStatus: "Completed",
+      payment_status: "Paid"  // mark payment as collected
+    })
+  })
+  .then(res=>res.json())
+  .then(()=>{
+    fetchOrders();
+    bootstrap.Modal.getInstance(document.getElementById("orderModal")).hide();
+    alert("Payment collected and order marked as Completed!");
+  });
+}
+
+// MARK AS PAID
+function markAsPaid(orderId){
+  // Automatically generate a transaction ID
+  const txnId = "TXN-" + Date.now();
+
+  fetch(API_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      action: "updateOrderStatus",
+      orderId: orderId,
+      newStatus: "Completed",
+      payment_status: "Paid",
+      transaction_id: txnId
+    })
+  })
+  .then(res => res.json())
+  .then(() => {
+    fetchOrders();
+    bootstrap.Modal.getInstance(document.getElementById("orderModal")).hide();
+    // Removed alert
+  });
+}
+
+// COLLECT ONLINE (Placeholder)
+function collectOnline(orderId){
+  alert("This will open a payment gateway modal in future (Credit Card / GCash / PayPal).");
+  // Future: integrate Stripe, PayPal, or GCASH QR code modal
+}
+
+/* ===============================
+SEND INVOICE (placeholder)
+=============================== */
+function sendInvoice(orderId){
+  alert(`Invoice sent for order ${orderId}!`);
+}
+
+function updateOrderStatus(data){
+  const sheet = getSheet("Orders");
+  const rows = sheet.getDataRange().getValues();
+  const txnCol = rows[0].indexOf("transaction_id") + 1; // find column index, +1 for sheet indexing
+
+  for(let i=1; i<rows.length; i++){
+    if(rows[i][0] == data.orderId){
+      sheet.getRange(i+1, 10).setValue(data.newStatus); // order_status
+      if(data.payment_status){
+        sheet.getRange(i+1, 9).setValue(data.payment_status); // payment_status
+      }
+      if(txnCol && data.transaction_id){
+        sheet.getRange(i+1, txnCol).setValue(data.transaction_id);
+      }
+      break;
+    }
+  }
+
+  return jsonResponse({success:true});
+}
+/* ===============================
+SAVE STATUS FROM MODAL
+=============================== */
+function saveStatus(){
+  const newStatus = document.getElementById("modalStatus").value;
+
+  fetch(API_URL,{
+    method:"POST",
+    body:JSON.stringify({
+      action:"updateOrderStatus",
+      orderId:selectedOrder.order_id,
+      newStatus:newStatus
+    })
+  })
+  .then(res=>res.json())
+  .then(()=>{
+    fetchOrders();
+    bootstrap.Modal.getInstance(
+      document.getElementById("orderModal")
+    ).hide();
+  });
+}
+
+document.addEventListener("DOMContentLoaded", fetchOrders);
+</script>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  </body>
+</html>

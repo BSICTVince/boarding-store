@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard - Sari-Sari Store</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<div class="container py-4">
+<h2 class="mb-4 text-center">Admin Dashboard</h2>
+
+<div class="row">
+  <div class="col-md-4 mb-3">
+    <div class="card p-3 text-center shadow-sm">
+      <h5>Total Products</h5>
+      <h2 id="totalProducts">0</h2>
+    </div>
+  </div>
+  <div class="col-md-4 mb-3">
+    <div class="card p-3 text-center shadow-sm">
+      <h5>Total Orders</h5>
+      <h2 id="totalOrders">0</h2>
+    </div>
+  </div>
+  <div class="col-md-4 mb-3">
+    <div class="card p-3 text-center shadow-sm">
+      <h5>Low Stock Alerts</h5>
+      <ul id="lowStock" class="list-unstyled mb-0"></ul>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbzojLcjhR3AqqZNtRgMZdzyP5IIQvwzxeX5p0yXTuI_TTfe4E7T7AVTsQ4p8QT-fmElmw/exec";
+
+fetch(API_URL+"?type=dashboard").then(res=>res.json()).then(d=>{
+  document.getElementById("totalProducts").innerText=d.totalProducts;
+  document.getElementById("totalOrders").innerText=d.totalOrders;
+});
+
+// Fetch products to show low stock
+fetch(API_URL+"?type=products").then(res=>res.json()).then(products=>{
+  const container = document.getElementById("lowStock");
+  products.forEach(p=>{
+    if(parseInt(p.on_hand)<5) container.innerHTML += `<li>${p.product_name} (${p.on_hand})</li>`;
+  });
+});
+</script>
+</body>
+</html>
